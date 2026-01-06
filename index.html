@@ -1,0 +1,383 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Unit Economics — Break-even Model</title>
+
+  <!-- External CSS allowed (no JS dependencies). -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@2/css/pico.min.css">
+
+  <style>
+    :root { --pico-font-size: 16px; }
+    main { padding-top: 2rem; padding-bottom: 3rem; }
+    .grid-2 { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+    @media (min-width: 992px) { .grid-2 { grid-template-columns: 1.1fr 0.9fr; } }
+    .card { border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius); padding: 1rem; }
+    .control { display: grid; gap: 0.5rem; margin-bottom: 1rem; }
+    .control .row { display: flex; gap: 0.75rem; align-items: center; }
+    .control .row input[type="number"] { max-width: 10.5rem; }
+    .control small { color: var(--pico-muted-color); }
+    .kpis { display: grid; gap: 0.75rem; }
+    .kpi { display: grid; gap: 0.15rem; padding: 0.75rem; border-radius: var(--pico-border-radius); background: var(--pico-card-background-color); border: 1px solid var(--pico-muted-border-color); }
+    .kpi .label { color: var(--pico-muted-color); font-size: 0.9rem; }
+    .kpi .value { font-size: 1.6rem; font-weight: 700; line-height: 1.1; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    .error { display: none; }
+    .error[aria-hidden="false"] { display: block; }
+    code, pre { font-size: 0.92rem; }
+  </style>
+</head>
+
+<body>
+  <main class="container">
+    <header>
+      <h1>Unit Economics — Break-even Model</h1>
+      <p class="secondary">Single-page, dependency-free JavaScript version of the Python slider model.</p>
+    </header>
+
+    <div class="grid-2">
+      <section class="card" aria-label="Inputs">
+        <h2>Inputs</h2>
+
+        <h3>CapEx</h3>
+
+        <div class="control">
+          <label for="unit_cost_range">Unit cost ($)</label>
+          <div class="row">
+            <input id="unit_cost_range" type="range" min="1000" max="100000" step="500" value="20000" />
+            <input id="unit_cost_number" type="number" min="1000" max="100000" step="500" value="20000" />
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="install_cost_range">Installation cost ($)</label>
+          <div class="row">
+            <input id="install_cost_range" type="range" min="500" max="50000" step="500" value="7000" />
+            <input id="install_cost_number" type="number" min="500" max="50000" step="500" value="7000" />
+          </div>
+          <small>CapEx total: <span id="capex_total" class="mono"></span></small>
+        </div>
+
+        <h3>Pricing + Payoff</h3>
+
+        <div class="control">
+          <label for="price_per_parcel_range">Price ($/parcel)</label>
+          <div class="row">
+            <input id="price_per_parcel_range" type="range" min="1.00" max="5.00" step="0.25" value="2.00" />
+            <input id="price_per_parcel_number" type="number" min="1.00" max="5.00" step="0.25" value="2.00" />
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="payoff_years_select">Payoff period (years)</label>
+          <select id="payoff_years_select">
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5" selected>5</option>
+            <option value="10">10</option>
+          </select>
+        </div>
+
+        <h3>Costs</h3>
+
+        <div class="control">
+          <label for="fixed_opex_month_range">Fixed OpEx ($/month per node)</label>
+          <div class="row">
+            <input id="fixed_opex_month_range" type="range" min="100" max="1000" step="50" value="300" />
+            <input id="fixed_opex_month_number" type="number" min="100" max="1000" step="50" value="300" />
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="variable_cost_range">Variable cost ($/parcel)</label>
+          <div class="row">
+            <input id="variable_cost_range" type="range" min="0.02" max="0.50" step="0.01" value="0.10" />
+            <input id="variable_cost_number" type="number" min="0.02" max="0.50" step="0.01" value="0.10" />
+          </div>
+        </div>
+
+        <h3>Capture assumptions</h3>
+
+        <div class="control">
+          <label for="eligibility_range">Eligibility (% of parcels processable)</label>
+          <div class="row">
+            <input id="eligibility_range" type="range" min="0.60" max="0.95" step="0.01" value="0.80" />
+            <input id="eligibility_number" type="number" min="0.60" max="0.95" step="0.01" value="0.80" />
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="capture_rate_range">Capture rate (default routing)</label>
+          <div class="row">
+            <input id="capture_rate_range" type="range" min="0.60" max="0.90" step="0.01" value="0.75" />
+            <input id="capture_rate_number" type="number" min="0.60" max="0.90" step="0.01" value="0.75" />
+          </div>
+        </div>
+
+        <div class="control">
+          <label for="parcels_per_resident_year_range">Parcels per resident per year</label>
+          <div class="row">
+            <input id="parcels_per_resident_year_range" type="range" min="10" max="200" step="1" value="66" />
+            <input id="parcels_per_resident_year_number" type="number" min="10" max="200" step="1" value="66" />
+          </div>
+        </div>
+
+        <details>
+          <summary class="secondary">Notes</summary>
+          <small>
+            <ul>
+              <li>Days per month constant: <span class="mono">365/12</span></li>
+              <li>Break-even uses straight-line capex recovery (not interest/amortization).</li>
+            </ul>
+          </small>
+        </details>
+      </section>
+
+      <aside class="card" aria-label="Results">
+        <h2>Results</h2>
+
+        <article id="error_box" class="error" aria-hidden="true">
+          <strong>Input error:</strong> <span id="error_text"></span>
+        </article>
+
+        <div class="kpis">
+          <div class="kpi">
+            <div class="label">Break-even parcels/day</div>
+            <div id="req_parcels_day" class="value mono">—</div>
+          </div>
+
+          <div class="kpi">
+            <div class="label">Implied residents needed</div>
+            <div id="req_residents" class="value mono">—</div>
+          </div>
+
+          <div class="kpi">
+            <div class="label">Break-even parcels/month</div>
+            <div id="req_parcels_month" class="value mono">—</div>
+          </div>
+
+          <div class="kpi">
+            <div class="label">CapEx recovery ($/month)</div>
+            <div id="capex_month" class="value mono">—</div>
+          </div>
+        </div>
+
+        <hr/>
+
+        <h3>Monthly check</h3>
+        <div class="grid">
+          <div>
+            <small class="secondary">Revenue</small>
+            <div id="monthly_revenue" class="mono"></div>
+          </div>
+          <div>
+            <small class="secondary">Variable cost</small>
+            <div id="monthly_variable_cost" class="mono"></div>
+          </div>
+          <div>
+            <small class="secondary">Fixed OpEx</small>
+            <div id="monthly_fixed_opex" class="mono"></div>
+          </div>
+          <div>
+            <small class="secondary">Net (should be ~0 at break-even)</small>
+            <div id="monthly_net" class="mono"></div>
+          </div>
+        </div>
+
+        <hr/>
+
+        <h3>Math (for review)</h3>
+        <pre class="mono"><code>capex_month = (unit_cost + install_cost) / (payoff_years * 12)
+contribution = price_per_parcel - variable_cost
+required_parcels_month = (fixed_opex_month + capex_month) / contribution
+required_parcels_day = required_parcels_month / (365/12)
+residents_needed = required_parcels_day / ((parcels_per_resident_year/365) * eligibility * capture_rate)</code></pre>
+      </aside>
+    </div>
+  </main>
+
+  <script>
+    "use strict";
+
+    // --- Constants mirroring the Python model ---
+    const DEFAULT_DAYS_PER_MONTH = 365.0 / 12.0;
+
+    // --- Formatting helpers ---
+    const nf0 = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+    const nf2 = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const money0 = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+    const money2 = new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    function clampNumber(x, min, max) {
+      if (!Number.isFinite(x)) return min;
+      return Math.min(max, Math.max(min, x));
+    }
+
+    // --- Core math (ported from src/model.py) ---
+    function capexRecoveryPerMonth(capexTotal, payoffYears) {
+      if (payoffYears <= 0) throw new Error("payoff_years must be > 0");
+      if (capexTotal < 0) throw new Error("capex_total must be >= 0");
+      return capexTotal / (payoffYears * 12.0);
+    }
+
+    function requiredParcelsPerMonth(pricePerParcel, variableCostPerParcel, fixedOpexPerMonth, capexRecoveryMonth) {
+      const contribution = pricePerParcel - variableCostPerParcel;
+      if (contribution <= 0) {
+        throw new Error("price_per_parcel must be greater than variable_cost to break even");
+      }
+      if (fixedOpexPerMonth < 0) throw new Error("fixed_opex_per_month must be >= 0");
+      if (capexRecoveryMonth < 0) throw new Error("capex_recovery_month must be >= 0");
+      return (fixedOpexPerMonth + capexRecoveryMonth) / contribution;
+    }
+
+    function requiredParcelsPerDay(pricePerParcel, variableCostPerParcel, fixedOpexPerMonth, capexTotal, payoffYears, daysPerMonth=DEFAULT_DAYS_PER_MONTH) {
+      if (daysPerMonth <= 0) throw new Error("days_per_month must be > 0");
+      const capexMonth = capexRecoveryPerMonth(capexTotal, payoffYears);
+      const vMonth = requiredParcelsPerMonth(pricePerParcel, variableCostPerParcel, fixedOpexPerMonth, capexMonth);
+      return vMonth / daysPerMonth;
+    }
+
+    function requiredResidents(requiredParcelsDay, parcelsPerResidentYear, eligibility, captureRate) {
+      if (requiredParcelsDay < 0) throw new Error("required_parcels_day must be >= 0");
+      if (parcelsPerResidentYear <= 0) throw new Error("parcels_per_resident_year must be > 0");
+      if (!(eligibility > 0 && eligibility <= 1)) throw new Error("eligibility must be in (0, 1]");
+      if (!(captureRate > 0 && captureRate <= 1)) throw new Error("capture_rate must be in (0, 1]");
+      const denom = (parcelsPerResidentYear / 365.0) * eligibility * captureRate;
+      return requiredParcelsDay / denom;
+    }
+
+    // --- Wiring / state ---
+    function bindRangeAndNumber(rangeId, numberId) {
+      const r = document.getElementById(rangeId);
+      const n = document.getElementById(numberId);
+
+      function syncFromRange() {
+        n.value = r.value;
+        recalc();
+      }
+      function syncFromNumber() {
+        const min = Number(n.min);
+        const max = Number(n.max);
+        const step = Number(n.step || "any");
+        let v = Number(n.value);
+        v = clampNumber(v, min, max);
+
+        // Snap to step (avoid float drift).
+        if (Number.isFinite(step) && step !== 0 && step !== "any") {
+          const snapped = Math.round((v - min) / step) * step + min;
+          v = Number(snapped.toFixed(10));
+        }
+
+        n.value = String(v);
+        r.value = String(v);
+        recalc();
+      }
+
+      r.addEventListener("input", syncFromRange);
+      n.addEventListener("input", syncFromNumber);
+    }
+
+    function getInputs() {
+      const unitCost = Number(document.getElementById("unit_cost_number").value);
+      const installCost = Number(document.getElementById("install_cost_number").value);
+      const pricePerParcel = Number(document.getElementById("price_per_parcel_number").value);
+      const payoffYears = Number(document.getElementById("payoff_years_select").value);
+      const fixedOpexMonth = Number(document.getElementById("fixed_opex_month_number").value);
+      const variableCost = Number(document.getElementById("variable_cost_number").value);
+      const eligibility = Number(document.getElementById("eligibility_number").value);
+      const captureRate = Number(document.getElementById("capture_rate_number").value);
+      const parcelsPerResidentYear = Number(document.getElementById("parcels_per_resident_year_number").value);
+
+      return {
+        unitCost, installCost, pricePerParcel, payoffYears, fixedOpexMonth,
+        variableCost, eligibility, captureRate, parcelsPerResidentYear,
+        capexTotal: unitCost + installCost
+      };
+    }
+
+    function setError(msg) {
+      const box = document.getElementById("error_box");
+      const txt = document.getElementById("error_text");
+      if (msg) {
+        txt.textContent = msg;
+        box.setAttribute("aria-hidden", "false");
+      } else {
+        txt.textContent = "";
+        box.setAttribute("aria-hidden", "true");
+      }
+    }
+
+    function recalc() {
+      try {
+        const x = getInputs();
+
+        // Display capex total
+        document.getElementById("capex_total").textContent = money0.format(x.capexTotal);
+
+        const capexMonth = capexRecoveryPerMonth(x.capexTotal, x.payoffYears);
+        const reqPd = requiredParcelsPerDay(
+          x.pricePerParcel, x.variableCost, x.fixedOpexMonth, x.capexTotal, x.payoffYears, DEFAULT_DAYS_PER_MONTH
+        );
+
+        // Derive monthly volume (inverse of pd conversion)
+        const reqMonth = reqPd * DEFAULT_DAYS_PER_MONTH;
+
+        const reqRes = requiredResidents(reqPd, x.parcelsPerResidentYear, x.eligibility, x.captureRate);
+
+        // Monthly check at break-even volume
+        const revenue = x.pricePerParcel * reqMonth;
+        const variable = x.variableCost * reqMonth;
+        const net = (revenue - variable) - x.fixedOpexMonth - capexMonth;
+
+        // Update UI
+        document.getElementById("capex_month").textContent = money0.format(capexMonth);
+        document.getElementById("req_parcels_day").textContent = nf2.format(reqPd);
+        document.getElementById("req_parcels_month").textContent = nf0.format(reqMonth);
+        document.getElementById("req_residents").textContent = nf0.format(reqRes);
+
+        document.getElementById("monthly_revenue").textContent = money0.format(revenue);
+        document.getElementById("monthly_variable_cost").textContent = money0.format(variable);
+        document.getElementById("monthly_fixed_opex").textContent = money0.format(x.fixedOpexMonth);
+        // show cents to make "near zero" visible
+        document.getElementById("monthly_net").textContent = money2.format(net);
+
+        setError(null);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : String(e));
+        // Still update capex total if possible.
+        try {
+          const x = getInputs();
+          document.getElementById("capex_total").textContent = money0.format(x.capexTotal);
+        } catch (_) {}
+        // Clear key outputs
+        document.getElementById("capex_month").textContent = "—";
+        document.getElementById("req_parcels_day").textContent = "—";
+        document.getElementById("req_parcels_month").textContent = "—";
+        document.getElementById("req_residents").textContent = "—";
+        document.getElementById("monthly_revenue").textContent = "—";
+        document.getElementById("monthly_variable_cost").textContent = "—";
+        document.getElementById("monthly_fixed_opex").textContent = "—";
+        document.getElementById("monthly_net").textContent = "—";
+      }
+    }
+
+    // --- Init ---
+    bindRangeAndNumber("unit_cost_range", "unit_cost_number");
+    bindRangeAndNumber("install_cost_range", "install_cost_number");
+    bindRangeAndNumber("price_per_parcel_range", "price_per_parcel_number");
+    bindRangeAndNumber("fixed_opex_month_range", "fixed_opex_month_number");
+    bindRangeAndNumber("variable_cost_range", "variable_cost_number");
+    bindRangeAndNumber("eligibility_range", "eligibility_number");
+    bindRangeAndNumber("capture_rate_range", "capture_rate_number");
+    bindRangeAndNumber("parcels_per_resident_year_range", "parcels_per_resident_year_number");
+
+    document.getElementById("payoff_years_select").addEventListener("change", recalc);
+
+    // First render
+    recalc();
+  </script>
+</body>
+</html>
